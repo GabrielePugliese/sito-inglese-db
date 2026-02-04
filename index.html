@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>In-Memory Database: Speed, Architecture and Real-World Applications</title>
+
+  <style>
+    :root{
+      --bg: #f5f5f5;
+      --paper: #ffffff;
+
+      --ink: #111827;
+      --muted: #4b5563;
+
+      --purple: #4A0E49;   /* headings (ok) */
+      --teal: #009080;     /* accent */
+      --teal-100: #E0F2F1; /* light teal boxes */
+      --peach-100: #F5E7DD;/* warm light */
+      --orange: #F5B569;   /* highlights */
+
+      --shadow: 0 14px 40px rgba(17, 24, 39, .14);
+      --shadow-soft: 0 10px 24px rgba(17, 24, 39, .10);
+      --radius-xl: 22px;
+      --radius-lg: 16px;
+
+      --max: 1100px;
+    }
+
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    body{
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+      padding: 22px;
+    }
+
+    .container{
+      max-width: var(--max);
+      margin: 0 auto;
+      background: var(--paper);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    /* ===== HERO ===== */
+    .hero{
+      position: relative;
+      padding: 54px 34px;
+      background:
+        radial-gradient(circle at 25% 20%, rgba(0,144,128,.18), transparent 55%),
+        radial-gradient(circle at 75% 30%, rgba(245,181,105,.22), transparent 55%),
+        linear-gradient(180deg, #ffffff 0%, #fbfbfb 100%);
+      border-bottom: 1px solid rgba(17,24,39,.06);
+      overflow: hidden;
+    }
+
+    .hero::before{
+      content:"";
+      position:absolute;
+      inset:-20%;
+      background:
+        linear-gradient(90deg, rgba(74,14,73,.08) 1px, transparent 1px),
+        linear-gradient(rgba(74,14,73,.08) 1px, transparent 1px);
+      background-size: 26px 26px;
+      transform: rotate(8deg);
+      opacity:.35;
+      pointer-events:none;
+    }
+
+    .hero-grid{
+      position: relative;
+      display: grid;
+      grid-template-columns: 1.3fr .7fr;
+      gap: 18px;
+      align-items: center;
+      z-index: 1;
+      max-width: var(--max);
+      margin: 0 auto;
+    }
+
+    .hero h1{
+      color: var(--purple);
+      font-size: clamp(2rem, 4vw, 3.1rem);
+      letter-spacing: .2px;
+      line-height: 1.12;
+      margin-bottom: 12px;
+    }
+
+    .hero .subtitle{
+      color: #1f2937;
+      font-size: clamp(1rem, 2vw, 1.25rem);
+      max-width: 46ch;
+    }
+
+    .hero .tagline{
+      margin-top: 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--teal-100);
+      color: #0f3b36;
+      border: 1px solid rgba(0,144,128,.22);
+      font-weight: 800;
+      width: fit-content;
+    }
+
+    /* ✅ NEW: real hero image container (no overlays) */
+    .hero-media{
+      justify-self: end;
+      width: min(360px, 100%);
+      aspect-ratio: 1 / 1;
+      border-radius: 26px;
+      background: #ffffff;
+      border: 1px solid rgba(17,24,39,.08);
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+    }
+
+    .hero-media img{
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+
+    /* ===== Generic layout ===== */
+    .section{ padding: 34px; }
+
+    .title{
+      color: var(--purple);
+      font-size: clamp(1.5rem, 2.6vw, 2.15rem);
+      margin-bottom: 14px;
+      letter-spacing: .2px;
+    }
+
+    .lead{
+      color: var(--muted);
+      font-size: 1.06rem;
+      max-width: 78ch;
+    }
+
+    .grid{
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 16px;
+    margin-top: 18px;
+    }
+
+
+    .card{
+      background: #fff;
+      border: 1px solid rgba(17,24,39,.08);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-soft);
+      padding: 18px;
+    }
+
+    .card h3{
+      color: var(--purple);
+      font-size: 1.25rem;
+      margin-bottom: 8px;
+    }
+
+    .card p{ color: var(--muted); }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 800;
+      border: 1px solid rgba(17,24,39,.10);
+      background: #fff;
+      box-shadow: 0 10px 18px rgba(17,24,39,.10);
+    }
+
+    .pill.teal{
+      background: var(--teal-100);
+      border-color: rgba(0,144,128,.22);
+      color: #0f3b36;
+    }
+
+    .pill.peach{
+      background: var(--peach-100);
+      border-color: rgba(245,181,105,.35);
+      color: #5a3a14;
+    }
+
+    /* ===== Speed ===== */
+    .speed-wrap{
+      background: linear-gradient(180deg, #ffffff 0%, #fbfbfb 100%);
+      border: 1px solid rgba(17,24,39,.08);
+      border-radius: var(--radius-xl);
+      padding: 22px;
+      box-shadow: var(--shadow-soft);
+      margin-top: 18px;
+    }
+
+    .speed-top{
+      display:flex;
+      align-items:flex-end;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .speed-kicker{
+      color: var(--purple);
+      font-weight: 900;
+      font-size: clamp(1.4rem, 3vw, 2rem);
+      letter-spacing: .3px;
+    }
+
+    .speed-big{
+      color: var(--orange);
+      font-weight: 1000;
+      font-size: clamp(1.6rem, 4.2vw, 2.6rem);
+      white-space: nowrap;
+    }
+
+    .bars{ margin-top: 18px; display:grid; gap: 12px; }
+
+    .barrow{
+      display:grid;
+      grid-template-columns: 180px 1fr 120px;
+      gap: 12px;
+      align-items:center;
+    }
+
+    .barrow .label{ color: #111827; font-weight: 800; }
+
+    .track{
+      height: 18px;
+      border-radius: 999px;
+      background: rgba(17,24,39,.08);
+      overflow:hidden;
+      position: relative;
+    }
+
+    .fill{
+      height: 100%;
+      border-radius: 999px;
+      width: 60%;
+    }
+
+    .fill.mem{ width: 86%; background: linear-gradient(90deg, var(--teal), #30c3b5); }
+    .fill.disk{ width: 32%; background: linear-gradient(90deg, #111827, #6b7280); }
+
+    .value{ text-align:right; font-weight: 900; color: var(--purple); }
+
+    .two-cols{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .bullets{
+      list-style: none;
+      margin-top: 10px;
+      color: var(--muted);
+    }
+    .bullets li{
+      padding-left: 26px;
+      position: relative;
+      margin: 8px 0;
+    }
+    .bullets li::before{
+      content:"•";
+      position:absolute;
+      left: 10px;
+      color: var(--purple);
+      font-weight: 900;
+    }
+
+    /* ===== Architecture cards ===== */
+    .arch3 .card{
+      padding: 18px 18px 16px;
+      border-radius: 18px;
+    }
+    .arch3 .card .icon{
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+    .arch3 .card h3{ font-size: 1.12rem; }
+
+    /* ✅ FIX: mini-diagram NO purple */
+    .mini-diagram{
+      margin-top: 10px;
+      border-radius: 14px;
+      background: #f3f4f6;                 /* neutral */
+      border: 1px solid rgba(17,24,39,.10);/* neutral */
+      padding: 14px;
+      overflow:auto;
+      color: #111827;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: .92rem;
+      line-height: 1.3;
+    }
+
+    .split{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-weight: 900;
+      border: 1px solid rgba(17,24,39,.10);
+      background: #fff;
+      margin-bottom: 10px;
+    }
+    .badge.teal{ border-color: rgba(0,144,128,.22); color:#0f3b36; background: var(--teal-100); }
+    .badge.orange{ border-color: rgba(245,181,105,.35); color:#5a3a14; background: var(--peach-100); }
+
+    /* ===== Use cases ===== */
+    .use6 .uc{
+      border-radius: 18px;
+      background: #fff;
+      border: 1px solid rgba(17,24,39,.08);
+      box-shadow: var(--shadow-soft);
+      padding: 16px;
+      min-height: 110px;
+      display:flex;
+      gap: 12px;
+      align-items:flex-start;
+    }
+    .use6 .uc .ic{ font-size: 26px; line-height: 1; margin-top: 2px; }
+    .use6 .uc h4{ color: var(--purple); font-size: 1.05rem; margin-bottom: 4px; }
+    .use6 .uc p{ color: var(--muted); font-size: .98rem; }
+
+    /* ===== Trade ===== */
+    .trade{
+      background: linear-gradient(180deg, #ffffff 0%, #fbfbfb 100%);
+      border: 1px solid rgba(17,24,39,.08);
+      border-radius: var(--radius-xl);
+      padding: 22px;
+      box-shadow: var(--shadow-soft);
+      margin-top: 18px;
+    }
+
+    .trade h3{ color: var(--purple); font-size: 1.2rem; margin-bottom: 10px; }
+
+    .checklist{
+      list-style:none;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+    .checklist li{
+      margin: 8px 0;
+      padding-left: 26px;
+      position: relative;
+    }
+    .checklist li::before{
+      content:"•";
+      position:absolute;
+      left: 10px;
+      color: #111827;
+      font-weight: 900;
+    }
+
+    .recommend{ margin-top: 16px; display:flex; justify-content:center; }
+
+    .footer{
+      padding: 22px 34px;
+      border-top: 1px solid rgba(17,24,39,.06);
+      background: #fbfbfb;
+      color: var(--muted);
+      text-align:center;
+      font-weight: 700;
+    }
+
+     .diagram-img{
+        margin-top: 12px;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid rgba(17,24,39,.10);
+        background: #f3f4f6;
+    }   
+
+    .diagram-img img{
+        width: 100%;
+        height: 190px;
+        object-fit: cover;
+        display: block;
+    }   
+
+    
+
+    @media (max-width: 900px){
+      .hero-grid{ grid-template-columns: 1fr; }
+      .hero-media{ justify-self: start; }
+      .two-cols, .split{ grid-template-columns: 1fr; }
+      .barrow{ grid-template-columns: 1fr; }
+      .value{ text-align:left; }
+      .section{ padding: 26px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+
+    <!-- HERO -->
+    <header class="hero">
+      <div class="hero-grid">
+        <div>
+          <h1>In-Memory Database:<br/>Speed, Architecture, and Real-World Applications</h1>
+          <p class="subtitle">Unlocking microsecond performance for real-time applications</p>
+          <div class="tagline">⚡ Sub-millisecond access • Real-time systems</div>
+        </div>
+
+        <!-- ✅ PERFECT: real image (no overlay “incollati”) -->
+        <div class="hero-media">
+          <img
+            alt="In-memory database illustration"
+            src='data:image/svg+xml;utf8,
+            <svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900">
+              <defs>
+                <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+                  <stop stop-color="%23E0F2F1" offset="0"/>
+                  <stop stop-color="%23F5E7DD" offset="1"/>
+                </linearGradient>
+                <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="%23000000" flood-opacity=".18"/>
+                </filter>
+              </defs>
+
+              <rect width="900" height="900" rx="70" fill="url(%23bg)"/>
+
+              <rect x="140" y="160" width="620" height="540" rx="44" fill="%23ffffff" filter="url(%23shadow)"/>
+              <rect x="200" y="230" width="500" height="130" rx="26" fill="%23f3f4f6" stroke="%23111827" stroke-opacity=".08"/>
+              <text x="230" y="305" font-family="Segoe UI, Arial" font-size="46" font-weight="800" fill="%23111827">IN-MEMORY DB</text>
+
+              <rect x="200" y="390" width="310" height="115" rx="28" fill="%23E0F2F1" stroke="%23009080" stroke-opacity=".25"/>
+              <text x="230" y="462" font-family="Segoe UI, Arial" font-size="40" font-weight="900" fill="%230f3b36">RAM</text>
+
+              <rect x="535" y="390" width="165" height="115" rx="28" fill="%23F5E7DD" stroke="%23F5B569" stroke-opacity=".35"/>
+              <text x="565" y="462" font-family="Segoe UI, Arial" font-size="32" font-weight="900" fill="%235a3a14">SSD</text>
+
+              <path d="M220 585h460" stroke="%23111827" stroke-opacity=".14" stroke-width="10" stroke-linecap="round"/>
+              <circle cx="280" cy="585" r="18" fill="%23009080"/>
+              <circle cx="390" cy="585" r="18" fill="%23F5B569"/>
+              <circle cx="500" cy="585" r="18" fill="%234B5563"/>
+              <circle cx="610" cy="585" r="18" fill="%23009080"/>
+
+              <text x="200" y="655" font-family="Segoe UI, Arial" font-size="26" fill="%234B5563">
+                Fast access • Real-time analytics • Low latency
+              </text>
+            </svg>'>
+        </div>
+      </div>
+    </header>
+
+    <!-- WHAT IS -->
+    <section class="section">
+      <h2 class="title">What is an In-Memory Database?</h2>
+      <p class="lead">
+        An in-memory database (IMDB) stores data primarily in main memory (RAM) rather than on disk,
+        enabling sub-millisecond response times by eliminating disk I/O bottlenecks.
+      </p>
+
+      <div class="grid" style="margin-top:16px;">
+        <div class="card" style="grid-column: span 6; background: var(--teal-100); border-color: rgba(0,144,128,.22);">
+          <h3>✅ Key Benefit</h3>
+          <p><strong>Direct CPU access</strong> to data with <strong>nanosecond-level latency</strong>.</p>
+        </div>
+        <div class="card" style="grid-column: span 6; background: var(--peach-100); border-color: rgba(245,181,105,.35);">
+          <h3>💡 Why it matters</h3>
+          <p>Real-time decisions become feasible where disk-based systems are too slow.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SPEED -->
+    <section class="section">
+      <h2 class="title">Core Advantages: Speed and Low Latency</h2>
+
+      <div class="speed-wrap">
+        <div class="speed-top">
+          <div class="speed-kicker">Speed Comparison</div>
+          <div class="speed-big">1,600× Faster Access</div>
+        </div>
+
+        <div class="bars">
+          <div class="barrow">
+            <div class="label">Traditional Database</div>
+            <div class="track"><div class="fill disk"></div></div>
+            <div class="value">~100 μs</div>
+          </div>
+
+          <div class="barrow">
+            <div class="label">In-Memory Database</div>
+            <div class="track"><div class="fill mem"></div></div>
+            <div class="value">~60 ns</div>
+          </div>
+        </div>
+
+        <div class="two-cols">
+          <div class="card">
+            <h3>Key Performance Benefits</h3>
+            <ul class="bullets">
+              <li>Sub-millisecond response times</li>
+              <li>Up to ~1.5M operations per second</li>
+              <li>Eliminates disk I/O bottlenecks</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <h3>Ideal Applications</h3>
+            <ul class="bullets">
+              <li>High-frequency trading systems</li>
+              <li>Real-time gaming leaderboards</li>
+              <li>Live analytics dashboards</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="recommend">
+          <div class="pill peach">🧠 Critical Advantage: nanosecond-level access enables true real-time decision making</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section class="section">
+      <h2 class="title">Key Architectural Components</h2>
+
+      <div class="grid arch3">
+        <div class="card" style="grid-column: span 4;">
+          <div class="icon">🧩</div>
+          <h3>Optimized Memory Layout</h3>
+          <ul class="bullets">
+            <li>Hash tables for O(1) access</li>
+            <li>B-trees / skip lists for range queries</li>
+            <li>Minimized CPU cache misses</li>
+          </ul>
+        </div>
+
+        <div class="card" style="grid-column: span 4;">
+          <div class="icon">🛡️</div>
+          <h3>Durability Mechanisms</h3>
+          <ul class="bullets">
+            <li>Snapshotting (periodic backups)</li>
+            <li>Append-only file (AOF) logging</li>
+            <li>Persistence to disk for recovery</li>
+          </ul>
+        </div>
+
+        <div class="card" style="grid-column: span 4;">
+          <div class="icon">🕸️</div>
+          <h3>Distributed Replication</h3>
+          <ul class="bullets">
+            <li>Quorum-based consensus (e.g., Raft)</li>
+            <li>Leader–follower models</li>
+            <li>Automatic failover protection</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="pill teal" style="justify-content:center; width:100%;">
+          These components balance performance, consistency, and fault tolerance in production environments
+        </div>
+      </div>
+    </section>
+
+<!-- MEMORY LAYOUT -->
+<section class="section">
+  <h2 class="title">Memory Layout and Data Structures</h2>
+  <p class="lead">
+    Optimized structures are chosen for in-memory access patterns (cache locality + CPU efficiency).
+  </p>
+
+  <div class="grid">
+
+    <div class="card" style="grid-column: span 6;">
+      <h3>Hash Table (O(1) average access)</h3>
+
+      <p style="margin-top:10px; color:#4b5563; font-size:1.02rem; line-height:1.6;">
+        A hash table stores data as <b>key → value</b> pairs. A hash function maps the key to an
+        index, enabling very fast lookup (average <b>O(1)</b>).
+      </p>
+
+      <ul style="margin-top:12px; padding-left:18px; color:#4b5563; line-height:1.7;">
+        <li>Fast reads/writes</li>
+        <li>Perfect for caching and sessions</li>
+        <li>Common in key-value databases</li>
+      </ul>
+    </div>
+
+    <div class="card" style="grid-column: span 6;">
+      <h3>Skip List (efficient range queries)</h3>
+
+      <p style="margin-top:10px; color:#4b5563; font-size:1.02rem; line-height:1.6;">
+        A skip list keeps elements <b>sorted</b> using multiple levels. It allows fast search and supports
+        range queries efficiently.
+      </p>
+
+      <ul style="margin-top:12px; padding-left:18px; color:#4b5563; line-height:1.7;">
+        <li>Efficient ordered operations</li>
+        <li>Great for ranking systems</li>
+        <li>Used in Redis sorted sets</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div style="margin-top:14px;">
+    <div class="pill teal" style="justify-content:center; width:100%;">
+      Key focus: cache locality and CPU efficiency (fewer cache misses ⇒ higher throughput)
+    </div>
+  </div>
+</section>
+
+
+    <!-- DURABILITY -->
+    <section class="section">
+      <h2 class="title">Durability and Persistence Strategies</h2>
+      <p class="lead">Data survives RAM volatility using snapshotting and/or continuous logging.</p>
+
+      <div class="split">
+        <div class="card">
+          <div class="badge teal">Snapshotting (RDB)</div>
+          <ul class="bullets">
+            <li>Point-in-time dataset copies</li>
+            <li>Simple to implement</li>
+            <li>Risk: data loss between snapshots</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="badge orange">Append-Only File (AOF)</div>
+          <ul class="bullets">
+            <li>Records every write operation</li>
+            <li>Stronger durability guarantees</li>
+            <li>Trade-off: performance overhead</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:16px;">
+        <div class="card" style="grid-column: span 8; background: var(--teal-100); border-color: rgba(0,144,128,.22);">
+          <h3>Modern Approach</h3>
+          <p>Systems can combine mechanisms to balance durability and performance based on requirements.</p>
+        </div>
+        <div class="card" style="grid-column: span 4; background: var(--peach-100); border-color: rgba(245,181,105,.35);">
+          <h3>Key Challenge</h3>
+          <p>RAM volatility requires robust persistence + recovery design.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- USE CASES -->
+    <section class="section">
+      <h2 class="title">Real-World Use Cases</h2>
+
+      <div class="grid use6">
+        <div class="uc" style="grid-column: span 4;">
+          <div class="ic">🧠</div>
+          <div><h4>Caching</h4><p>High-performance caches for social platforms and e-commerce.</p></div>
+        </div>
+        <div class="uc" style="grid-column: span 4;">
+          <div class="ic">👤</div>
+          <div><h4>Session Management</h4><p>Shopping carts, user preferences, sessions across devices.</p></div>
+        </div>
+        <div class="uc" style="grid-column: span 4;">
+          <div class="ic">📊</div>
+          <div><h4>Real-Time Analytics</h4><p>IoT sensors, tickers, and live dashboards.</p></div>
+        </div>
+        <div class="uc" style="grid-column: span 4;">
+          <div class="ic">💹</div>
+          <div><h4>High-Frequency Trading</h4><p>Microsecond trade execution and market data processing.</p></div>
+        </div>
+        <div class="uc" style="grid-column: span 4;">
+          <div class="ic">🤖</div>
+          <div><h4>AI & Machine Learning</h4><p>Vector search, RAG pipelines, real-time feature stores.</p></div>
+        </div>
+        <div class="uc" style="grid-column: span 4;">
+          <div class="ic">🎮</div>
+          <div><h4>Gaming & Leaderboards</h4><p>Instant score updates and real-time interactions.</p></div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="pill teal" style="justify-content:center; width:100%;">
+          Performance example: Redis can handle up to ~1.5M operations per second
+        </div>
+      </div>
+    </section>
+
+    <!-- TRADE -->
+    <section class="section">
+      <h2 class="title">Trade-offs and Strategic Considerations</h2>
+
+      <div class="trade">
+        <div class="two-cols">
+          <div class="card">
+            <h3>Key Challenges</h3>
+            <ul class="checklist">
+              <li>Volatility risk: RAM data lost during power failures</li>
+              <li>Cost constraints: pure DRAM systems can be expensive</li>
+              <li>Capacity limits: constrained by available RAM</li>
+              <li>Operational complexity: monitoring + backup required</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <h3>Strategic Solutions</h3>
+            <ul class="checklist">
+              <li>Use AOF logging + replication for durability</li>
+              <li>Adopt hybrid architectures for cost efficiency</li>
+              <li>Deploy tiered storage: DRAM hot, SSD cold</li>
+              <li>Use managed services to reduce overhead</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="recommend">
+          <div class="pill peach" style="text-align:center;">
+            Recommendation: hybrid approaches balance speed, cost, and scalability for enterprise deployments
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      💾 In-Memory Databases — microsecond performance for real-time systems ⚡
+    </footer>
+
+  </div>
+</body>
+</html>
+
